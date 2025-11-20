@@ -54,7 +54,7 @@ const LoadingFallback = () => (
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/hubempresas">
       <AuthProvider>
         <ToastProvider>
           <Suspense fallback={<LoadingFallback />}>
