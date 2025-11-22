@@ -7,6 +7,19 @@ export interface EvaluationScore {
   financeiro_score: number;
 }
 
+export interface Rubric {
+  [score: string]: string; // "0": "Description for 0", "10": "Description for 10"
+}
+
+export interface Criterion {
+  id: string;
+  name: string;
+  weight: number;
+  max_score: number;
+  description?: string;
+  rubric?: Rubric;
+}
+
 export interface EvaluationData {
   id: string;
   company_id: string;
@@ -16,6 +29,8 @@ export interface EvaluationData {
   weighted_score?: number;
   gate_value?: string;
   notes?: string;
+  ai_feedback?: string;
+  checkpoint?: string;
   is_valid: boolean;
 }
 

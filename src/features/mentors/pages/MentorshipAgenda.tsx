@@ -4,9 +4,9 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/features/auth';
-import { 
+import {
   Calendar, Clock, Plus, Video, MapPin, Users, Bell,
-  Edit, Trash2, CheckCircle, AlertCircle, ChevronLeft, ChevronRight
+  Edit, Trash2, CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Settings, Bot
 } from 'lucide-react';
 import { Card } from '@/design-system/ui/Card';
 import { Button } from '@/design-system/ui/Button';
@@ -62,13 +62,15 @@ export default function MentorshipAgenda() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
-  
+
   // Estados de modal/formulário
   const [showNewMeetingModal, setShowNewMeetingModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [selectedMentorshipConfig, setSelectedMentorshipConfig] = useState<any>(null);
   const [selectedActivity, setSelectedActivity] = useState<MentorshipActivity | null>(null);
   const [mentorships, setMentorships] = useState<any[]>([]);
-  
+
   // Formulário nova reunião
   const [newMeeting, setNewMeeting] = useState<NewMeetingData>({
     mentorship_id: '',
@@ -113,7 +115,7 @@ export default function MentorshipAgenda() {
       const calendarEvents: CalendarEvent[] = (activitiesData || []).map(activity => {
         const start = new Date(activity.scheduled_at);
         const end = new Date(start.getTime() + activity.duration_minutes * 60000);
-        
+
         return {
           id: activity.id,
           title: activity.title,
@@ -147,7 +149,9 @@ export default function MentorshipAgenda() {
         .select(`
           *,
           company:companies(name, sector),
-          mentor:profiles!mentorships_mentor_id_fkey(full_name)
+          mentor:profiles!mentorships_mentor_id_fkey(full_name),
+          mentorship_mode,
+          ai_persona
         `)
         .eq('mentor_id', profile.id)
         .eq('status', 'active');
@@ -296,6 +300,34 @@ export default function MentorshipAgenda() {
     setCurrentDate(newDate);
   };
 
+  const updateMentorshipConfig = async (mentorshipId: string, mode: string, persona: string) => {
+    try {
+      const { error } = await supabase
+        .from('mentorships')
+        .update({ mentorship_mode: mode, ai_persona: persona })
+        .eq('id', mentorshipId);
+
+      if (error) throw error;
+
+      addToast({
+        type: 'success',
+        title: 'Configuração atualizada',
+        description: 'Modo de mentoria e persona atualizados com sucesso'
+      });
+
+      loadMentorships(); // Reload to update UI
+      setShowConfigModal(false);
+
+    } catch (error) {
+      console.error('Erro ao atualizar configuração:', error);
+      addToast({
+        type: 'error',
+        title: 'Erro',
+        description: 'Não foi possível atualizar a configuração'
+      });
+    }
+  };
+
   // Obter cor do status
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -324,28 +356,28 @@ export default function MentorshipAgenda() {
   const generateCalendarDays = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    
+
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
     const startingDayOfWeek = firstDay.getDay();
 
     const days = [];
-    
+
     // Dias vazios do início
     for (let i = 0; i < startingDayOfWeek; i++) {
       days.push(null);
     }
-    
+
     // Dias do mês
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
-      const dayEvents = events.filter(event => 
+      const dayEvents = events.filter(event =>
         event.start.getDate() === day &&
         event.start.getMonth() === month &&
         event.start.getFullYear() === year
       );
-      
+
       days.push({
         date: day,
         fullDate: date,
@@ -353,7 +385,7 @@ export default function MentorshipAgenda() {
         isToday: date.toDateString() === new Date().toDateString()
       });
     }
-    
+
     return days;
   };
 
@@ -368,7 +400,7 @@ export default function MentorshipAgenda() {
           { label: 'Mentor', href: '/mentor/dashboard' },
           { label: 'Agenda', href: '/mentor/agenda' }
         ]} />
-        
+
         <div className="mt-4 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 flex items-center">
@@ -388,23 +420,32 @@ export default function MentorshipAgenda() {
             <Plus className="w-4 h-4" />
             <span>Agendar Reunião</span>
           </Button>
+
+          <Button
+            variant="secondary"
+            onClick={() => setShowConfigModal(true)}
+            className="flex items-center space-x-2 ml-2"
+          >
+            <Settings className="w-4 h-4" />
+            <span>Configurar IA</span>
+          </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
+
         {/* Calendário Principal */}
         <div className="lg:col-span-2">
           <Card className="p-6">
             {/* Header do calendário */}
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">
-                {currentDate.toLocaleDateString('pt-BR', { 
-                  month: 'long', 
-                  year: 'numeric' 
+                {currentDate.toLocaleDateString('pt-BR', {
+                  month: 'long',
+                  year: 'numeric'
                 }).replace(/^./, str => str.toUpperCase())}
               </h2>
-              
+
               <div className="flex space-x-2">
                 <Button
                   variant="secondary"
@@ -441,23 +482,21 @@ export default function MentorshipAgenda() {
 
               {/* Dias do calendário */}
               {calendarDays.map((day, index) => (
-                <div 
-                  key={index} 
-                  className={`min-h-[120px] border border-gray-200 p-2 ${
-                    day ? 'bg-white hover:bg-gray-50' : 'bg-gray-100'
-                  }`}
+                <div
+                  key={index}
+                  className={`min-h-[120px] border border-gray-200 p-2 ${day ? 'bg-white hover:bg-gray-50' : 'bg-gray-100'
+                    }`}
                 >
                   {day && (
                     <>
-                      <div className={`text-sm font-medium mb-1 ${
-                        day.isToday ? 'text-blue-600' : 'text-gray-900'
-                      }`}>
+                      <div className={`text-sm font-medium mb-1 ${day.isToday ? 'text-blue-600' : 'text-gray-900'
+                        }`}>
                         {day.date}
                         {day.isToday && (
                           <span className="ml-1 w-2 h-2 bg-blue-600 rounded-full inline-block"></span>
                         )}
                       </div>
-                      
+
                       {/* Eventos do dia */}
                       <div className="space-y-1">
                         {day.events.slice(0, 2).map(event => (
@@ -465,17 +504,17 @@ export default function MentorshipAgenda() {
                             key={event.id}
                             className="text-xs p-1 rounded cursor-pointer truncate"
                             style={{
-                              backgroundColor: event.status === 'scheduled' ? '#dbeafe' : 
-                                             event.status === 'confirmed' ? '#dcfce7' : 
-                                             event.status === 'completed' ? '#f3f4f6' : '#fecaca'
+                              backgroundColor: event.status === 'scheduled' ? '#dbeafe' :
+                                event.status === 'confirmed' ? '#dcfce7' :
+                                  event.status === 'completed' ? '#f3f4f6' : '#fecaca'
                             }}
                             onClick={() => setSelectedActivity(event.activity)}
                           >
                             <div className="font-medium">{event.title}</div>
                             <div className="text-gray-600">
-                              {event.start.toLocaleTimeString('pt-BR', { 
-                                hour: '2-digit', 
-                                minute: '2-digit' 
+                              {event.start.toLocaleTimeString('pt-BR', {
+                                hour: '2-digit',
+                                minute: '2-digit'
                               })}
                             </div>
                           </div>
@@ -506,15 +545,15 @@ export default function MentorshipAgenda() {
               .filter(activity => new Date(activity.scheduled_at) > new Date())
               .slice(0, 5)
               .map(activity => (
-                <div 
-                  key={activity.id} 
+                <div
+                  key={activity.id}
                   className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg mb-3 hover:bg-gray-50 cursor-pointer"
                   onClick={() => setSelectedActivity(activity)}
                 >
                   <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-lg">
                     {getMeetingTypeIcon(activity.meeting_type)}
                   </div>
-                  
+
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 truncate">
                       {activity.title}
@@ -538,7 +577,7 @@ export default function MentorshipAgenda() {
                   </div>
                 </div>
               ))}
-              
+
             {activities.filter(activity => new Date(activity.scheduled_at) > new Date()).length === 0 && (
               <div className="text-center py-6 text-gray-500">
                 <Clock className="w-8 h-8 mx-auto mb-2 text-gray-300" />
@@ -552,7 +591,7 @@ export default function MentorshipAgenda() {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Estatísticas do Mês
             </h3>
-            
+
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-600">Total de reuniões</span>
@@ -588,7 +627,7 @@ export default function MentorshipAgenda() {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Agendar Nova Reunião
             </h3>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -728,6 +767,89 @@ export default function MentorshipAgenda() {
         </div>
       )}
 
+      {/* Modal Configuração IA */}
+      {showConfigModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                <Bot className="w-6 h-6 mr-2 text-purple-600" />
+                Configuração de IA Mentores
+              </h3>
+              <button onClick={() => setShowConfigModal(false)} className="text-gray-400 hover:text-gray-600">
+                <span className="sr-only">Fechar</span>
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
+              <p className="text-sm text-gray-600">
+                Configure o nível de automação e a personalidade da IA para cada empresa que você mentora.
+              </p>
+
+              <div className="space-y-4">
+                {mentorships.map(mentorship => (
+                  <div key={mentorship.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h4 className="font-medium text-gray-900">{mentorship.company?.name}</h4>
+                        <p className="text-xs text-gray-500">{mentorship.company?.sector}</p>
+                      </div>
+                      <Badge variant={
+                        mentorship.mentorship_mode === 'ai' ? 'warning' :
+                          mentorship.mentorship_mode === 'hybrid' ? 'success' : 'secondary'
+                      }>
+                        {mentorship.mentorship_mode === 'ai' ? '100% IA' :
+                          mentorship.mentorship_mode === 'hybrid' ? 'Híbrido (HITL)' : 'Humano'}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Modo de Operação</label>
+                        <select
+                          className="w-full text-sm rounded-md border-gray-300"
+                          value={mentorship.mentorship_mode || 'human'}
+                          onChange={(e) => updateMentorshipConfig(mentorship.id, e.target.value, mentorship.ai_persona)}
+                        >
+                          <option value="human">Somente Humano</option>
+                          <option value="hybrid">Híbrido (Sugestão IA + Aprovação)</option>
+                          <option value="ai">Somente IA (Automático)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Persona da IA</label>
+                        <select
+                          className="w-full text-sm rounded-md border-gray-300"
+                          value={mentorship.ai_persona || 'general_mentor'}
+                          onChange={(e) => updateMentorshipConfig(mentorship.id, mentorship.mentorship_mode, e.target.value)}
+                          disabled={mentorship.mentorship_mode === 'human'}
+                        >
+                          <option value="general_mentor">Mentor Generalista</option>
+                          <option value="product_expert">Especialista de Produto</option>
+                          <option value="sales_expert">Especialista de Vendas B2B</option>
+                          <option value="growth_hacker">Growth Hacker</option>
+                          <option value="fundraising_advisor">Advisor de Fundraising</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <Button variant="secondary" onClick={() => setShowConfigModal(false)}>
+                Fechar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Detalhes da Atividade */}
       {selectedActivity && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -735,7 +857,7 @@ export default function MentorshipAgenda() {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Detalhes da Reunião
             </h3>
-            
+
             <div className="space-y-4">
               <div>
                 <h4 className="font-medium text-gray-900">{selectedActivity.title}</h4>
@@ -786,7 +908,7 @@ export default function MentorshipAgenda() {
               >
                 Fechar
               </Button>
-              
+
               {selectedActivity.meeting_url && (
                 <Button
                   variant="primary"

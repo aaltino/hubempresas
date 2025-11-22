@@ -11,6 +11,7 @@ import { Alert } from '@/design-system/feedback/Alert';
 import { Button } from '@/design-system/ui/Button';
 import { Card } from '@/design-system/ui/Card';
 import { Badge } from '@/design-system/ui/Badge';
+import { RubricInput } from '../components/RubricInput';
 import {
   Plus,
   Eye,
@@ -22,7 +23,9 @@ import {
   ClipboardList,
   BarChart3,
   History,
-  Settings
+  Settings,
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 
 interface EvaluationWithHistory extends Evaluation {
@@ -32,6 +35,11 @@ interface EvaluationWithHistory extends Evaluation {
   edited_count: number;
   last_edited_at?: string;
   last_edited_by?: string;
+  checkpoint?: string;
+  ai_feedback?: string;
+  mode?: 'human' | 'hybrid' | 'ai';
+  ai_model_used?: string;
+  audit_log?: any[];
 }
 
 interface EvaluationStats {
@@ -47,6 +55,10 @@ interface FormState {
   criteria_scores: Record<string, number>;
   notes: string;
   gate_value: string;
+  checkpoint: string;
+  ai_feedback: string;
+  mentorship_mode: 'human' | 'hybrid' | 'ai';
+  ai_raw_response: string;
 }
 
 export default function AvaliacoesPageEnhanced() {
@@ -70,7 +82,12 @@ export default function AvaliacoesPageEnhanced() {
     company_id: '',
     criteria_scores: {},
     notes: '',
-    gate_value: ''
+    gate_value: '',
+    checkpoint: 'week_4',
+
+    ai_feedback: '',
+    mentorship_mode: 'human',
+    ai_raw_response: ''
   });
   const [selectedEvaluation, setSelectedEvaluation] = useState<EvaluationWithHistory | null>(null);
   const [evaluationHistory, setEvaluationHistory] = useState<EvaluationWithHistory[]>([]);
@@ -79,6 +96,7 @@ export default function AvaliacoesPageEnhanced() {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [calculatedScore, setCalculatedScore] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
   const selectedTemplate = templates.find(t => t.id === formData.template_id);
 
@@ -92,6 +110,36 @@ export default function AvaliacoesPageEnhanced() {
       calculateScore();
     }
   }, [formData.criteria_scores, selectedTemplate]);
+
+  // Fetch mentorship mode when company changes
+  useEffect(() => {
+    if (formData.company_id) {
+      fetchMentorshipMode(formData.company_id);
+    }
+  }, [formData.company_id]);
+
+  const fetchMentorshipMode = async (companyId: string) => {
+    try {
+      // Check for specific mentorship config first
+      const { data: mentorship } = await supabase
+        .from('mentorships')
+        .select('mentorship_mode')
+        .eq('company_id', companyId)
+        .eq('status', 'active')
+        .single();
+
+      if (mentorship?.mentorship_mode) {
+        setFormData(prev => ({ ...prev, mentorship_mode: mentorship.mentorship_mode }));
+        return;
+      }
+
+      // Fallback to program default (mocked for now)
+      setFormData(prev => ({ ...prev, mentorship_mode: 'hybrid' }));
+
+    } catch (error) {
+      console.error('Error fetching mentorship mode:', error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -252,6 +300,62 @@ export default function AvaliacoesPageEnhanced() {
     return errors.length === 0;
   };
 
+  const generateAIFeedback = async () => {
+    if (!selectedTemplate) return;
+
+    setIsGeneratingAI(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-mentor', {
+        body: {
+          company_id: formData.company_id,
+          evaluation_data: {
+            criteria_scores: formData.criteria_scores,
+            weighted_score: calculatedScore,
+            notes: formData.notes
+          },
+          persona: 'product_expert' // Could be dynamic
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        setFormData(prev => ({
+          ...prev,
+          ai_raw_response: data.feedback,
+          // If AI mode, auto-apply. If Hybrid, just store raw for review.
+          ai_feedback: prev.mentorship_mode === 'ai' ? data.feedback : prev.ai_feedback
+        }));
+      }
+
+    } catch (error) {
+      console.error('Erro ao gerar feedback IA:', error);
+      // Fallback mock
+      let feedback = "Análise Preliminar com IA (Fallback):\n\n";
+      if (calculatedScore > 80) {
+        feedback += "🚀 **Pontos Fortes:** Excelente maturidade.\n💡 **Sugestão:** Focar em escala.";
+      } else {
+        feedback += "⚠️ **Atenção:** Precisa de validação.\n💡 **Sugestão:** Mais entrevistas.";
+      }
+      setFormData(prev => ({ ...prev, ai_raw_response: feedback }));
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  const approveAIResponse = () => {
+    setFormData(prev => ({
+      ...prev,
+      ai_feedback: prev.ai_raw_response,
+      ai_raw_response: '' // Clear raw after approval
+    }));
+  };
+
+  const discardAIResponse = () => {
+    setFormData(prev => ({ ...prev, ai_raw_response: '' }));
+  };
+
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
@@ -266,6 +370,10 @@ export default function AvaliacoesPageEnhanced() {
         weighted_score: calculatedScore,
         notes: formData.notes,
         gate_value: formData.gate_value || null,
+        checkpoint: formData.checkpoint,
+        ai_feedback: formData.ai_feedback,
+        mode: formData.mentorship_mode,
+        ai_raw_response: formData.ai_raw_response || null,
         status: 'approved',
         evaluation_type: 'periodic'
       };
@@ -304,7 +412,12 @@ export default function AvaliacoesPageEnhanced() {
       company_id: '',
       criteria_scores: {},
       notes: '',
-      gate_value: ''
+      gate_value: '',
+      gate_value: '',
+      checkpoint: 'week_4',
+      ai_feedback: '',
+      mentorship_mode: 'human',
+      ai_raw_response: ''
     });
     setValidationErrors([]);
     setCalculatedScore(0);
@@ -319,7 +432,11 @@ export default function AvaliacoesPageEnhanced() {
       company_id: evaluation.company_id,
       criteria_scores: evaluation.criteria_scores || {},
       notes: evaluation.notes || '',
-      gate_value: evaluation.gate_value || ''
+      gate_value: evaluation.gate_value || '',
+      checkpoint: evaluation.checkpoint || 'week_4',
+      ai_feedback: evaluation.ai_feedback || '',
+      mentorship_mode: evaluation.mode || 'human',
+      ai_raw_response: ''
     });
 
     setShowEditModal(true);
@@ -627,65 +744,155 @@ export default function AvaliacoesPageEnhanced() {
                 </select>
               </div>
 
-              {/* Dynamic Criteria */}
+              {/* Checkpoint Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Fase / Checkpoint
+                </label>
+                <select
+                  value={formData.checkpoint}
+                  onChange={(e) => setFormData({ ...formData, checkpoint: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="week_4">Validação (Semana 1-4)</option>
+                  <option value="week_8">Market Fit (Semana 5-8)</option>
+                  <option value="week_12">Go-to-Market (Semana 9-12)</option>
+                  <option value="final">Avaliação Final</option>
+                </select>
+              </div>
+
+              {/* Dynamic Criteria with Rubric */}
               {selectedTemplate && selectedTemplate.criteria && (
-                <div className="space-y-4">
-                  <h4 className="font-medium text-gray-900">Critérios de Avaliação</h4>
+                <div className="space-y-6">
+                  <h4 className="font-medium text-gray-900 text-lg border-b pb-2">Critérios de Avaliação</h4>
                   {selectedTemplate.criteria.map((criterion) => (
-                    <div key={criterion.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="font-medium text-gray-700">
-                          {criterion.name}
-                        </label>
-                        <span className="text-sm text-gray-500">
-                          Peso: {criterion.weight} | Máx: {criterion.max_score}
-                        </span>
+                    <div key={criterion.id} className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h5 className="font-semibold text-gray-900 text-lg">{criterion.name}</h5>
+                          {criterion.description && (
+                            <p className="text-sm text-gray-600 mt-1">{criterion.description}</p>
+                          )}
+                        </div>
+                        <Badge variant="outline" className="bg-white">
+                          Peso: {criterion.weight}
+                        </Badge>
                       </div>
-                      {criterion.description && (
-                        <p className="text-sm text-gray-600 mb-3">{criterion.description}</p>
-                      )}
-                      <input
-                        type="number"
-                        min="0"
-                        max={criterion.max_score}
-                        step="0.1"
-                        value={formData.criteria_scores[criterion.id] || ''}
-                        onChange={(e) => setFormData({
-                          ...formData,
+
+                      <RubricInput
+                        criterionId={criterion.id}
+                        maxScore={criterion.max_score}
+                        value={formData.criteria_scores[criterion.id] || 0}
+                        onChange={(val) => setFormData(prev => ({
+                          ...prev,
                           criteria_scores: {
-                            ...formData.criteria_scores,
-                            [criterion.id]: parseFloat(e.target.value) || 0
+                            ...prev.criteria_scores,
+                            [criterion.id]: val
                           }
-                        })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder={`Score (0 - ${criterion.max_score})`}
+                        }))}
+                        rubric={criterion.rubric}
                       />
                     </div>
                   ))}
 
                   {/* Calculated Score */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-blue-900">Score Final Calculado</span>
-                      <span className="text-2xl font-bold text-blue-900">
-                        {calculatedScore.toFixed(1)}%
-                      </span>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 flex items-center justify-between">
+                    <div>
+                      <span className="block font-medium text-blue-900">Score Final Calculado</span>
+                      <span className="text-sm text-blue-700">Baseado nos pesos configurados</span>
                     </div>
+                    <span className="text-4xl font-bold text-blue-900">
+                      {calculatedScore.toFixed(1)}%
+                    </span>
                   </div>
+                </div>
+              )}
+
+              {/* AI Feedback Section */}
+              {formData.mentorship_mode !== 'human' && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-2">
+                      <Sparkles className="w-5 h-5 text-purple-600" />
+                      <h4 className="font-semibold text-purple-900">
+                        Feedback Inteligente (IA)
+                        <Badge variant="secondary" className="ml-2 bg-purple-200 text-purple-800">
+                          {formData.mentorship_mode === 'hybrid' ? 'Human-in-the-Loop' : 'Automático'}
+                        </Badge>
+                      </h4>
+                    </div>
+                    <Button
+                      onClick={generateAIFeedback}
+                      disabled={isGeneratingAI || calculatedScore === 0}
+                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                      size="sm"
+                    >
+                      {isGeneratingAI ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Gerando...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          Gerar Sugestão
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Review Area for Hybrid Mode */}
+                  {formData.ai_raw_response && formData.mentorship_mode === 'hybrid' && (
+                    <div className="mb-4 p-4 bg-white rounded border border-purple-100 shadow-sm">
+                      <h5 className="text-sm font-medium text-purple-800 mb-2">Sugestão da IA:</h5>
+                      <div className="text-sm text-gray-700 whitespace-pre-wrap mb-4">
+                        {formData.ai_raw_response}
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button size="sm" onClick={approveAIResponse} className="bg-green-600 hover:bg-green-700 text-white">
+                          ✔️ Aprovar & Usar
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={discardAIResponse}>
+                          ❌ Descartar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {formData.ai_feedback ? (
+                    <div>
+                      <label className="block text-sm font-medium text-purple-900 mb-1">
+                        Feedback Final (Editável)
+                      </label>
+                      <textarea
+                        value={formData.ai_feedback}
+                        onChange={(e) => setFormData({ ...formData, ai_feedback: e.target.value })}
+                        rows={5}
+                        className="w-full px-3 py-2 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white text-gray-800"
+                        placeholder="O feedback gerado pela IA aparecerá aqui..."
+                      />
+                    </div>
+                  ) : (
+                    !formData.ai_raw_response && (
+                      <div className="text-center py-8 text-purple-400 text-sm italic">
+                        Preencha a avaliação e clique em "Gerar Sugestão" para iniciar.
+                      </div>
+                    )
+                  )}
                 </div>
               )}
 
               {/* Notes */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Observações
+                  Observações Adicionais
                 </label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Comentários sobre a avaliação..."
+                  placeholder="Comentários extras do mentor..."
                 />
               </div>
 
@@ -709,7 +916,7 @@ export default function AvaliacoesPageEnhanced() {
             </div>
 
             {/* Actions */}
-            <div className="flex space-x-3 pt-6 border-t">
+            <div className="flex space-x-3 pt-6 border-t mt-6">
               <Button
                 variant="secondary"
                 onClick={() => {

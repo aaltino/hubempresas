@@ -52,246 +52,285 @@ const LoadingFallback = () => (
   </div>
 );
 
+import { HubProvider, useHub } from './contexts/HubContext';
+
+// Lazy Imports
+const HubSelectionPage = lazy(() => import('./pages/HubSelectionPage'));
+// ... existing lazy imports ...
+
+function HubRouteGuard({ children }: { children: React.ReactNode }) {
+  const { currentHub, isLoading } = useHub();
+
+  if (isLoading) return <LoadingFallback />;
+
+  if (!currentHub) {
+    return <Navigate to="/select-hub" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <BrowserRouter basename="/hubempresas">
       <AuthProvider>
-        <ToastProvider>
-          <Suspense fallback={<LoadingFallback />}>
-            <Routes>
-              <Route path="/setup" element={<SetupPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/" element={<DashboardLayout />}>
-                {/* Dashboard - Todos os usuários autenticados */}
+        <HubProvider>
+          <ToastProvider>
+            <Suspense fallback={<LoadingFallback />}>
+              <Routes>
+                <Route path="/setup" element={<SetupPage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+                {/* Hub Selection */}
                 <Route
-                  path="dashboard"
+                  path="/select-hub"
                   element={
                     <ProtectedRoute>
-                      <DashboardPage />
+                      <HubSelectionPage />
                     </ProtectedRoute>
                   }
                 />
 
-                {/* Dashboard do Mentor - Apenas mentores */}
-                <Route
-                  path="mentor/dashboard"
-                  element={
-                    <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
-                      <MentorDashboardPage />
-                    </ProtectedRoute>
-                  }
-                />
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-                {/* Parcerias de Mentoria - Apenas mentores */}
-                <Route
-                  path="mentor/partnerships"
-                  element={
-                    <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
-                      <MentorPartnershipsPage />
-                    </ProtectedRoute>
-                  }
-                />
+                {/* Protected Hub Routes */}
+                <Route path="/" element={
+                  <HubRouteGuard>
+                    <DashboardLayout />
+                  </HubRouteGuard>
+                }>
+                  {/* Dashboard - Todos os usuários autenticados */}
+                  <Route
+                    path="dashboard"
+                    element={
+                      <ProtectedRoute>
+                        <DashboardPage />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* FASE 3: Sistema Mentor-Startup */}
+                  {/* ... existing routes ... */}
 
-                {/* Dashboard Mentor Otimizado */}
-                <Route
-                  path="mentor/dashboard-otimizado"
-                  element={
-                    <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
-                      <MentorDashboardOptimized />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Dashboard do Mentor - Apenas mentores */}
+                  <Route
+                    path="mentor/dashboard"
+                    element={
+                      <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
+                        <MentorDashboardPage />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Sistema de Matching Automático */}
-                <Route
-                  path="mentor/matching"
-                  element={
-                    <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
-                      <MentorMatchingSystem />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Parcerias de Mentoria - Apenas mentores */}
+                  <Route
+                    path="mentor/partnerships"
+                    element={
+                      <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
+                        <MentorPartnershipsPage />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Agenda de Mentorias Integrada */}
-                <Route
-                  path="mentor/agenda"
-                  element={
-                    <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
-                      <MentorshipAgenda />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* FASE 3: Sistema Mentor-Startup */}
 
-                {/* Dashboard de Parcerias Ativas */}
-                <Route
-                  path="mentor/parcerias"
-                  element={
-                    <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
-                      <PartnershipsDashboard />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Dashboard Mentor Otimizado */}
+                  <Route
+                    path="mentor/dashboard-otimizado"
+                    element={
+                      <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
+                        <MentorDashboardOptimized />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Sistema de Feedback Avançado */}
-                <Route
-                  path="mentor/feedback"
-                  element={
-                    <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
-                      <FeedbackSystemAdvanced />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Sistema de Matching Automático */}
+                  <Route
+                    path="mentor/matching"
+                    element={
+                      <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
+                        <MentorMatchingSystem />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Empresas - FASE 2 Enhanced */}
-                <Route
-                  path="empresas"
-                  element={
-                    <ProtectedRoute resource="startup" action="read">
-                      <EmpresasPageEnhanced />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Agenda de Mentorias Integrada */}
+                  <Route
+                    path="mentor/agenda"
+                    element={
+                      <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
+                        <MentorshipAgenda />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Detalhes da Empresa */}
-                <Route
-                  path="empresas/:id"
-                  element={
-                    <ProtectedRoute resource="startup" action="read">
-                      <CompanyDetailsPage />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Dashboard de Parcerias Ativas */}
+                  <Route
+                    path="mentor/parcerias"
+                    element={
+                      <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
+                        <PartnershipsDashboard />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Editar Empresa */}
-                <Route
-                  path="empresas/editar/:id"
-                  element={
-                    <ProtectedRoute resource="startup" action="update">
-                      <CompanyEditPage />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Sistema de Feedback Avançado */}
+                  <Route
+                    path="mentor/feedback"
+                    element={
+                      <ProtectedRoute requireAny={{ resource: "mentorship", actions: ["read", "log_notes"] }}>
+                        <FeedbackSystemAdvanced />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Avaliações - FASE 2 Enhanced */}
-                <Route
-                  path="avaliacoes"
-                  element={
-                    <ProtectedRoute resource="evaluation" action="read">
-                      <AvaliacoesPageEnhanced />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Empresas - FASE 2 Enhanced */}
+                  <Route
+                    path="empresas"
+                    element={
+                      <ProtectedRoute resource="startup" action="read">
+                        <EmpresasPageEnhanced />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Mentores - Admin ou Gestor */}
-                <Route
-                  path="mentores"
-                  element={
-                    <ProtectedRoute requireAny={{ resource: "user", actions: ["create", "update"] }}>
-                      <MentorsPage />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Detalhes da Empresa */}
+                  <Route
+                    path="empresas/:id"
+                    element={
+                      <ProtectedRoute resource="startup" action="read">
+                        <CompanyDetailsPage />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Questionários - Todos os usuários autenticados */}
-                <Route
-                  path="questionarios"
-                  element={
-                    <ProtectedRoute>
-                      <QuestionnaireListPage />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Editar Empresa */}
+                  <Route
+                    path="empresas/editar/:id"
+                    element={
+                      <ProtectedRoute resource="startup" action="update">
+                        <CompanyEditPage />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Estatísticas de Questionários - Admin e Mentor */}
-                <Route
-                  path="questionarios/estatisticas"
-                  element={
-                    <ProtectedRoute requireAny={{ resource: "questionnaire", actions: ["read_statistics"] }}>
-                      <QuestionnaireStatisticsPage />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Avaliações - FASE 2 Enhanced */}
+                  <Route
+                    path="avaliacoes"
+                    element={
+                      <ProtectedRoute resource="evaluation" action="read">
+                        <AvaliacoesPageEnhanced />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Página de Questionário Individual - Todos os usuários autenticados */}
-                <Route
-                  path="questionarios/:programKey"
-                  element={
-                    <ProtectedRoute>
-                      <QuestionnairePage />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Mentores - Admin ou Gestor */}
+                  <Route
+                    path="mentores"
+                    element={
+                      <ProtectedRoute requireAny={{ resource: "user", actions: ["create", "update"] }}>
+                        <MentorsPage />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Badges - FASE 2 Enhanced */}
-                <Route
-                  path="badges"
-                  element={
-                    <ProtectedRoute>
-                      <BadgesPageEnhanced />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Questionários - Todos os usuários autenticados */}
+                  <Route
+                    path="questionarios"
+                    element={
+                      <ProtectedRoute>
+                        <QuestionnaireListPage />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* FASE 4: Analytics & Expansão */}
+                  {/* Estatísticas de Questionários - Admin e Mentor */}
+                  <Route
+                    path="questionarios/estatisticas"
+                    element={
+                      <ProtectedRoute requireAny={{ resource: "questionnaire", actions: ["read_statistics"] }}>
+                        <QuestionnaireStatisticsPage />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Dashboard Executivo - Admin e Viewer Executivo */}
-                <Route
-                  path="executive"
-                  element={
-                    <ProtectedRoute requireAny={{ resource: "user", actions: ["read", "create", "update"] }}>
-                      <ExecutiveDashboard />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Página de Questionário Individual - Todos os usuários autenticados */}
+                  <Route
+                    path="questionarios/:programKey"
+                    element={
+                      <ProtectedRoute>
+                        <QuestionnairePage />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Busca Avançada - Todos os usuários autenticados */}
-                <Route
-                  path="search"
-                  element={
-                    <ProtectedRoute>
-                      <AdvancedSearchPage />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Badges - FASE 2 Enhanced */}
+                  <Route
+                    path="badges"
+                    element={
+                      <ProtectedRoute>
+                        <BadgesPageEnhanced />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Sistema de Exportação - Todos os usuários autenticados para demonstração */}
-                <Route
-                  path="export"
-                  element={
-                    <ProtectedRoute>
-                      <ExportInsightsPage />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* FASE 4: Analytics & Expansão */}
 
-                {/* Documentação da API - Todos os usuários autenticados para demonstração */}
-                <Route
-                  path="api-docs"
-                  element={
-                    <ProtectedRoute>
-                      <ApiDocumentationPage />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Dashboard Executivo - Admin e Viewer Executivo */}
+                  <Route
+                    path="executive"
+                    element={
+                      <ProtectedRoute requireAny={{ resource: "user", actions: ["read", "create", "update"] }}>
+                        <ExecutiveDashboard />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Configuração - Todos os usuários autenticados */}
-                <Route
-                  path="configuracao"
-                  element={
-                    <ProtectedRoute>
-                      <ConfigurationPage />
-                    </ProtectedRoute>
-                  }
-                />
-              </Route>
-            </Routes>
-          </Suspense>
-        </ToastProvider>
+                  {/* Busca Avançada - Todos os usuários autenticados */}
+                  <Route
+                    path="search"
+                    element={
+                      <ProtectedRoute>
+                        <AdvancedSearchPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Sistema de Exportação - Todos os usuários autenticados para demonstração */}
+                  <Route
+                    path="export"
+                    element={
+                      <ProtectedRoute>
+                        <ExportInsightsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Documentação da API - Todos os usuários autenticados para demonstração */}
+                  <Route
+                    path="api-docs"
+                    element={
+                      <ProtectedRoute>
+                        <ApiDocumentationPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Configuração - Todos os usuários autenticados */}
+                  <Route
+                    path="configuracao"
+                    element={
+                      <ProtectedRoute>
+                        <ConfigurationPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                </Route>
+              </Routes>
+            </Suspense>
+          </ToastProvider>
+        </HubProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -23,6 +23,25 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface Hub {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url?: string;
+  colors?: { primary: string; secondary: string };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HubMember {
+  id: string;
+  hub_id: string;
+  user_id: string;
+  role: 'admin' | 'gestor' | 'mentor' | 'startup_owner' | 'startup_member' | 'viewer_executivo';
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Company {
   id: string;
   name: string;
@@ -47,6 +66,7 @@ export interface Company {
   social_links?: Record<string, string>;
   contact_info?: Record<string, string>;
   metrics?: Record<string, any>;
+  hub_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -117,17 +137,17 @@ export interface Evaluation {
 export interface EvaluationTemplate {
   id: string;
   name: string;
-  description?: string;
-  criteria: Array<{
+  description: string;
+  total_weight: number;
+  criteria: {
     id: string;
     name: string;
     weight: number;
     max_score: number;
     description?: string;
-  }>;
-  total_weight: number;
+    rubric?: { [score: string]: string };
+  }[];
   is_active: boolean;
-  created_by?: string;
   created_at: string;
   updated_at: string;
 }
